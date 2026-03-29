@@ -1,0 +1,18 @@
+services:
+  ssh-bridge:
+    build: ./
+    image: ssh-bridge:latest
+    container_name: ssh-bridge
+    networks:
+      - guacamole-net
+    volumes:
+      - ./ssh-keys:/home/sshbridge/.ssh:ro          # Mount your private key(s) here
+      - ./tunnels.conf:/etc/tunnels.conf:ro         # Your tunnel definitions
+    restart: unless-stopped
+    # Optional resource limits for 500+ listeners
+    ulimits:
+      nofile: 8192
+
+networks:
+  guacamole-net:
+    driver: bridge
