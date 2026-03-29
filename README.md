@@ -1,6 +1,6 @@
 # SSH-Bridge
 
-A lightweight Docker-based SSH tunnel bridge for on-demand VNC access through jump hosts. Uses `socat` and SSH's `-W` flag to forward local ports to remote VNC servers securely.
+A lightweight Docker-based SSH tunnel bridge for on-demand VNC access. Uses `socat` and SSH's `-W` flag to forward local ports to remote VNC servers securely.
 
 ## Features
 
@@ -14,8 +14,8 @@ A lightweight Docker-based SSH tunnel bridge for on-demand VNC access through ju
 ## Prerequisites
 
 - Docker & Docker Compose
-- SSH private key(s) for authentication to jump host
-- Network access to your jump host and target VNC servers
+- SSH private key(s) for authentication to remote hosts
+- Network access to remote machines with VNC servers
 
 ## Quick Start
 
@@ -35,17 +35,16 @@ chmod 600 ssh-keys/id_rsa
 Edit `tunnels.conf` with your tunnel definitions:
 
 ```
-# local_port   ssh_user     ssh_jump_host          target_vnc_host       vnc_port   extra_ssh_options
-10001          jumpuser     gateway.company.com    vnc-server-001.local  5900       -o ServerAliveInterval=30
-10002          jumpuser     gateway.company.com    vnc-server-002.local  5900       -o ServerAliveInterval=30
-10003          jumpuser     gateway.company.com    vnc-server-003.local  5900       -o ServerAliveInterval=30
+# local_port   ssh_user     remote_host            vnc_port   extra_ssh_options
+10001          vnc-user     vnc-server-001.local   5900       -o ServerAliveInterval=30
+10002          vnc-user     vnc-server-002.local   5900       -o ServerAliveInterval=30
+10003          vnc-user     vnc-server-003.local   5900       -o ServerAliveInterval=30
 ```
 
 **Fields:**
 - `local_port`: Port the container listens on (accessible from your host)
-- `ssh_user`: SSH username for jump host authentication
-- `ssh_jump_host`: Jump host address (hostname or IP)
-- `target_vnc_host`: Internal hostname/IP of VNC server (reachable from jump host)
+- `ssh_user`: SSH username for remote host authentication
+- `remote_host`: Hostname or IP of remote machine with VNC server
 - `vnc_port`: VNC port (typically 5900, or 5901+ for multiple displays)
 - `extra_ssh_options`: (Optional) Additional SSH flags
 
@@ -60,9 +59,6 @@ docker compose up -d ssh-bridge
 ```bash
 # Via VNC viewer
 vncviewer localhost:10001
-
-# Or SSH tunnel (if not using ssh-bridge)
-ssh -L 10001:vnc-server-001.local:5900 jumpuser@gateway.company.com
 ```
 
 ## Configuration
@@ -92,7 +88,7 @@ Each line in `tunnels.conf` defines one tunnel. Skip empty lines and comments (s
 **Example with multiple SSH options:**
 
 ```
-10010  devops  jump-prod.example.com  internal-vnc.pod  5900  -i /home/sshbridge/.ssh/other_key -p 2222
+10010  devops  vnc-server.prod.local  5900  -i /home/sshbridge/.ssh/other_key -p 2222
 ```
 
 **Common SSH options:**
@@ -106,8 +102,8 @@ Each line in `tunnels.conf` defines one tunnel. Skip empty lines and comments (s
 
 1. **Container startup**: Reads `tunnels.conf` and launches a `socat` listener for each tunnel
 2. **Incoming connection**: When a client connects to a local port, `socat` spawns an `ssh` subprocess
-3. **SSH tunnel**: `ssh -W` creates a transparent tunnel from jump host to target VNC server
-4. **Connection forwarding**: Traffic flows: `localhost:10001` → `socat` → `ssh` → `jump-host` → `vnc-server:5900`
+3. **SSH tunnel**: `ssh -W` creates a transparent tunnel to the remote VNC server
+4. **Connection forwarding**: Traffic flows: `localhost:10001` → `socat` → `ssh` → `remote-vnc-server:5900`
 
 ## Security Considerations
 
@@ -121,7 +117,8 @@ Each line in `tunnels.conf` defines one tunnel. Skip empty lines and comments (s
 
 1. **Host key verification**: Pre-populate known hosts to enhance security:
    ```dockerfile
-   RUN ssh-keyscan -t rsa gateway.company.com >> /home/sshbridge/.ssh/known_hosts
+   RUN ssh-keyscan -t rsa vnc-server-001.local >> /home/sshbridge/.ssh/known_hosts
+   RUN ssh-keyscan -t rsa vnc-server-002.local >> /home/sshbridge/.ssh/known_hosts
    ```
 
 2. **Private network deployment**: Run in a Docker network (not exposed to public internet)
@@ -146,7 +143,7 @@ docker compose logs -f ssh-bridge
 ### Test SSH connection manually
 
 ```bash
-docker compose exec ssh-bridge ssh -vvv jumpuser@gateway.company.com -W target-vnc:5900
+docker compose exec ssh-bridge ssh -vvv vnc-user@vnc-server-001.local -W localhost:5900
 ```
 
 ### Verify tunnel is listening
@@ -174,16 +171,16 @@ chmod 600 ssh-keys/id_*
 
 ### Connection timeouts
 
-- Verify jump host is reachable: `ping gateway.company.com`
-- Check SSH server is running on jump host: `ssh jumpuser@gateway.company.com`
-- Verify VNC server is accessible from jump host
+- Verify remote host is reachable: `ping vnc-server-001.local`
+- Check SSH server is running on remote host: `ssh vnc-user@vnc-server-001.local`
+- Verify VNC server is running on the remote host
 - Increase `-o ConnectTimeout=` value in `tunnels.conf`
 
 ### No VNC connection despite tunnel active
 
 - Verify correct VNC port (5900 is default, but may vary)
-- Check firewall on VNC server allows local connections
-- Test with `netstat` on jump host: `netstat -an | grep 5900`
+- Check firewall on remote machine allows VNC connections
+- Test with `netstat` on remote host: `netstat -an | grep 5900`
 
 ## Performance & Limits
 
