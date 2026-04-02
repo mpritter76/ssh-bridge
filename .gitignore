@@ -1,0 +1,10 @@
+# Ignore all files in ssh-keys directory
+ssh-keys/*
+
+# But allow the directory itself
+!ssh-keys/
+
+# Optionally ignore other sensitive files
+*.pem
+*.key
+*.pub
